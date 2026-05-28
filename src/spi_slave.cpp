@@ -11,7 +11,7 @@
  * Set to 20 MHz as documentation for the expected master clock speed.
  * The ESP32 master must be configured to the same rate.
  */
-#define SPI_SPEED_HZ  20000000u
+#define SPI_SPEED_HZ  25000000u
 
 /*
  * DMA RX buffer: one full rect packet (header + max payload).  DMA refills
