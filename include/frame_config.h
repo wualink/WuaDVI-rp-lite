@@ -36,8 +36,8 @@
 #define FRAME_MAGIC_3  0xD8u
 
 #define FRAME_HEADER_SIZE   4u
-#define FRAME_PIXEL_BYTES   ((uint32_t)(SCREEN_W) * (SCREEN_H) * 2u)  /* 153 600 */
-#define FRAME_TOTAL_SIZE    (FRAME_HEADER_SIZE + FRAME_PIXEL_BYTES)    /* 153 604 */
+#define FRAME_PIXEL_BYTES   ((uint32_t)(SCREEN_W) * (SCREEN_H) * 2u)  /* 150 KB @320x240 */
+#define FRAME_TOTAL_SIZE    (FRAME_HEADER_SIZE + FRAME_PIXEL_BYTES)
 
 /* ── Rect protocol (SPI from ESP32) ─────────────────────────────────────── */
 #define RECT_MAGIC_0  0xA5u
@@ -53,5 +53,5 @@
  * PARTIAL_BUF_LINES (24) lines fits in one packet.
  */
 #define PARTIAL_BUF_LINES   24u
-#define RECT_PAYLOAD_MAX    ((uint32_t)(SCREEN_W) * (PARTIAL_BUF_LINES) * 2u)  /* 15 360 */
-#define RECT_TOTAL_SIZE     ((uint32_t)(RECT_HEADER_SIZE) + (RECT_PAYLOAD_MAX)) /* 15 372 */
+#define RECT_PAYLOAD_MAX    ((uint32_t)(SCREEN_W) * (PARTIAL_BUF_LINES) * 2u)  /* 15 360 @320w */
+#define RECT_TOTAL_SIZE     ((uint32_t)(RECT_HEADER_SIZE) + (RECT_PAYLOAD_MAX))
