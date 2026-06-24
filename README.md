@@ -20,9 +20,33 @@ No UI logic lives here. The RP2350 knows nothing about widgets, layouts, or even
                                                                        │ HDMI
                                                                        ▼
                                                                    Monitor
-                                                               640×480 @ 60 Hz
-                                                           (2× pixel-doubled from 320×240)
+                                                            640×480 or 800×480 @ 60 Hz
+                                                       (2× pixel-doubled from 320×240 / 400×240)
 ```
+
+---
+
+## Resolution
+
+The native framebuffer resolution is selectable at **compile time** via a build flag in [`platformio.ini`](platformio.ini). Both modes use full RGB565 color (`DVIGFX16`) with 2× pixel doubling; the framebuffer lives uncompressed in the RP2350's 520 KB SRAM, so its size is the limiting factor.
+
+| Build flag             | Native FB | Framebuffer (RGB565) | DVI output    | VREG |
+|------------------------|-----------|----------------------|---------------|------|
+| `-DWUADVI_RES_320x240` | 320 × 240 | 150 KB               | 640 × 480p60  | 1.20 V |
+| `-DWUADVI_RES_400x240` | 400 × 240 | 192 KB               | 800 × 480p60  | 1.20 V |
+
+Both share `VREG_VOLTAGE_1_20`, so 400×240 needs no extra overclock margin. 640×480 at full RGB565 is **not** possible — its 600 KB framebuffer exceeds the 520 KB SRAM.
+
+```ini
+build_flags =
+    ; Uncomment exactly ONE — must match the flag in WuaDVI-esp32-lvgl:
+    -DWUADVI_RES_320x240
+    ; -DWUADVI_RES_400x240
+```
+
+> **Both firmwares must select the same flag.** The ESP32 sends dirty-rect coordinates relative to `SCREEN_W`/`SCREEN_H`; if the two sides disagree, rects won't line up with the RP2350's framebuffer (and out-of-bounds rects are silently dropped).
+
+Selecting a flag sets `DVI_RESOLUTION`, `SCREEN_W` and `SCREEN_H` in [`include/dvi_config.h`](include/dvi_config.h); if neither flag is defined the build fails with a `#error`.
 
 ---
 
@@ -74,7 +98,7 @@ WuaDVI-rp-lite/
 
 ### `include/dvi_config.h`
 
-Defines the `dvi_serialiser_cfg` struct with the physical GPIO assignments for the Waveshare RP2350-PiZero board, plus the resolution macro (`DVI_RES_320x240p60`) and screen dimension constants (`SCREEN_W`, `SCREEN_H`).
+Defines the `dvi_serialiser_cfg` struct with the physical GPIO assignments for the Waveshare RP2350-PiZero board, plus a `#if` block that maps the resolution build flag (see [Resolution](#resolution)) to the matching `DVI_RESOLUTION` macro and screen dimension constants (`SCREEN_W`, `SCREEN_H`).
 
 ### `include/frame_config.h`
 
@@ -133,7 +157,7 @@ Byte offset    Size      Field
 | Color depth  | 16-bit RGB565                      |
 | Byte order   | Same as LVGL `LV_COLOR_FORMAT_RGB565` |
 | Layout       | Row-major, top-left origin         |
-| Dimensions   | 320 × 240 pixels                   |
+| Dimensions   | `SCREEN_W` × `SCREEN_H` (320×240 or 400×240, see [Resolution](#resolution)) |
 
 The RP2350 copies the received bytes verbatim into the PicoDVI framebuffer. No color conversion is performed, so the ESP32 must produce pixels in the exact same format that PicoDVI expects.
 
@@ -155,7 +179,7 @@ The RP2350 copies the received bytes verbatim into the PicoDVI framebuffer. No c
 
 This firmware is passive — it only renders what it receives. The companion **WuaDVI-esp32-lvgl** project is responsible for:
 
-1. **Running LVGL** with a 320×240 RGB565 display driver that targets an in-memory framebuffer (not a real display).
+1. **Running LVGL** with an RGB565 display driver at the **same resolution flag** selected here (320×240 or 400×240, see [Resolution](#resolution)) that targets an in-memory framebuffer (not a real display).
 2. **Sending complete frames** over SPI as described above:
    - Assert CS low.
    - Transmit 4 magic bytes (`0xA5 0xB6 0xC7 0xD8`).
