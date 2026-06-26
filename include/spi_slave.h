@@ -31,13 +31,15 @@ void spi_slave_init(void);
 bool spi_slave_poll(void);
 
 /*
- * Blit the last received rect (the one whose poll returned true) into a full
- * 320*240 RGB565 framebuffer, copying row by row at the correct stride.
+ * Blit the last received rect (the one whose poll returned true) into the full
+ * DVI framebuffer, copying row by row at the correct stride.  The framebuffer
+ * is passed as raw bytes; the pixel width is WUADVI_PIXEL_BYTES (2 for RGB565),
+ * so the same code serves all resolutions.
  *
  * Must be called between a successful spi_slave_poll() and the next one.
  * No-op if the last polled packet had out-of-range coords.
  */
-void spi_slave_blit_rect(uint16_t *dvi_fb);
+void spi_slave_blit_rect(uint8_t *dvi_fb);
 
 /*
  * Diagnostics — counters since boot.  Useful to tell apart:

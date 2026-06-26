@@ -29,6 +29,14 @@
  *      4-byte magic + 153 600 bytes of pixels.  No longer used over SPI.
  */
 
+/*
+ * Pixel size is mode-dependent (see dvi_config.h):
+ *   - RGB565 modes (320x240 / 400x240): WUADVI_PIXEL_BYTES == 2
+ *   - Monochrome mode (640x480x1):      1 bit/pixel, packed (see below)
+ * Every size below is derived from it so the rect protocol is format-agnostic:
+ * the blit just copies WUADVI_PIXEL_BYTES-wide pixels at the right stride.
+ */
+
 /* ── Full-frame protocol (legacy, USB-serial test only) ─────────────────── */
 #define FRAME_MAGIC_0  0xA5u
 #define FRAME_MAGIC_1  0xB6u
@@ -36,7 +44,7 @@
 #define FRAME_MAGIC_3  0xD8u
 
 #define FRAME_HEADER_SIZE   4u
-#define FRAME_PIXEL_BYTES   ((uint32_t)(SCREEN_W) * (SCREEN_H) * 2u)  /* 150 KB @320x240 */
+#define FRAME_PIXEL_BYTES   ((uint32_t)(SCREEN_W) * (SCREEN_H) * WUADVI_PIXEL_BYTES)
 #define FRAME_TOTAL_SIZE    (FRAME_HEADER_SIZE + FRAME_PIXEL_BYTES)
 
 /* ── Rect protocol (SPI from ESP32) ─────────────────────────────────────── */
@@ -53,5 +61,15 @@
  * PARTIAL_BUF_LINES (24) lines fits in one packet.
  */
 #define PARTIAL_BUF_LINES   24u
-#define RECT_PAYLOAD_MAX    ((uint32_t)(SCREEN_W) * (PARTIAL_BUF_LINES) * 2u)  /* 15 360 @320w */
+#if defined(WUADVI_COLOR_MONO)
+/*
+ * Monochrome wire format: 1 bit/pixel, packed MSB-first, each rect row padded
+ * to a whole byte.  Max payload = a full-width strip of PARTIAL_BUF_LINES rows.
+ *   RECT_ROW_BYTES_MAX = ceil(SCREEN_W/8)  (80 B for 640)
+ */
+#define RECT_ROW_BYTES_MAX  (((uint32_t)(SCREEN_W) + 7u) / 8u)
+#define RECT_PAYLOAD_MAX    (RECT_ROW_BYTES_MAX * (PARTIAL_BUF_LINES))
+#else
+#define RECT_PAYLOAD_MAX    ((uint32_t)(SCREEN_W) * (PARTIAL_BUF_LINES) * WUADVI_PIXEL_BYTES)
+#endif
 #define RECT_TOTAL_SIZE     ((uint32_t)(RECT_HEADER_SIZE) + (RECT_PAYLOAD_MAX))

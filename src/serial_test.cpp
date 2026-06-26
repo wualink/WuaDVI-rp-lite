@@ -13,7 +13,7 @@ void serial_test_init(void) {
     Serial.setTimeout(SERIAL_READ_TIMEOUT_MS);
 }
 
-bool serial_test_poll(uint16_t *dvi_fb) {
+bool serial_test_poll(uint8_t *dvi_fb) {
     /* Wait until at least the 4-byte magic header arrives. */
     if (Serial.available() < (int)FRAME_HEADER_SIZE) return false;
 
@@ -31,7 +31,7 @@ bool serial_test_poll(uint16_t *dvi_fb) {
      * Writing directly avoids an extra 150 KB intermediate buffer.
      * PicoDVI's DMA scanner on core1 reads the same buffer concurrently,
      * so there will be a brief transfer-time tear — acceptable in test mode. */
-    uint8_t  *dest     = (uint8_t *)dvi_fb;
+    uint8_t  *dest     = dvi_fb;
     uint32_t  received = 0;
 
     while (received < FRAME_PIXEL_BYTES) {

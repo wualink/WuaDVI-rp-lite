@@ -28,25 +28,32 @@ No UI logic lives here. The RP2350 knows nothing about widgets, layouts, or even
 
 ## Resolution
 
-The native framebuffer resolution is selectable at **compile time** via a build flag in [`platformio.ini`](platformio.ini). Both modes use full RGB565 color (`DVIGFX16`) with 2× pixel doubling; the framebuffer lives uncompressed in the RP2350's 520 KB SRAM, so its size is the limiting factor.
+The native framebuffer resolution is selectable at **compile time** via a build flag in [`platformio.ini`](platformio.ini). The framebuffer lives uncompressed in the RP2350's 520 KB SRAM, so its size is the limiting factor. Three modes are available:
 
-| Build flag             | Native FB | Framebuffer (RGB565) | DVI output    | VREG |
-|------------------------|-----------|----------------------|---------------|------|
-| `-DWUADVI_RES_320x240` | 320 × 240 | 150 KB               | 640 × 480p60  | 1.20 V |
-| `-DWUADVI_RES_400x240` | 400 × 240 | 192 KB               | 800 × 480p60  | 1.20 V |
+| Build flag               | Native FB | Framebuffer | Color              | DVI output   | VREG   |
+|--------------------------|-----------|-------------|--------------------|--------------|--------|
+| `-DWUADVI_RES_320x240`   | 320 × 240 | 150 KB      | RGB565 (16-bit)    | 640 × 480p60 | 1.20 V |
+| `-DWUADVI_RES_400x240`   | 400 × 240 | 192 KB      | RGB565 (16-bit)    | 800 × 480p60 | 1.20 V |
+| `-DWUADVI_RES_640x480x1` | 640 × 480 | 37.5 KB     | Monochrome (1-bit) | 640 × 480p60 | 1.20 V |
 
-Both share `VREG_VOLTAGE_1_20`, so 400×240 needs no extra overclock margin. 640×480 at full RGB565 is **not** possible — its 600 KB framebuffer exceeds the 520 KB SRAM.
+- **RGB565 modes (320×240 / 400×240)** — full color via `DVIGFX16` with 2× pixel doubling (square pixels). This is the original, hardware-verified pipeline.
+- **Monochrome mode (640×480x1)** — `DVIGFX1`, 1 bit/pixel, native (1:1) pixels. This is the only way to reach a true 640×480 on this board: full-color 640×480 RGB565 needs 600 KB and exceeds the 520 KB SRAM, and an 8-bit indexed alternative isn't viable on the RP2350-PiZero (its real-time TMDS encoder can't sustain 640 unique pixels per scanline). The 1-bit TMDS encoder is cheap enough to drive native 640×480.
+
+> **⚠️ Monochrome flat-field banding.** In 1-bit mode, large flat areas (e.g. a solid white background) show faint, regularly-spaced vertical lines — an artifact inherent to TMDS-encoding a constant 1-bit field, not a firmware bug. Busy content and **dark backgrounds mask it completely**, so prefer black/dark backgrounds with light foreground shapes in this mode. For artifact-free flat fields, use an RGB565 mode instead.
+
+All modes share `VREG_VOLTAGE_1_20`.
 
 ```ini
 build_flags =
     ; Uncomment exactly ONE — must match the flag in WuaDVI-esp32-lvgl:
     -DWUADVI_RES_320x240
     ; -DWUADVI_RES_400x240
+    ; -DWUADVI_RES_640x480x1
 ```
 
 > **Both firmwares must select the same flag.** The ESP32 sends dirty-rect coordinates relative to `SCREEN_W`/`SCREEN_H`; if the two sides disagree, rects won't line up with the RP2350's framebuffer (and out-of-bounds rects are silently dropped).
 
-Selecting a flag sets `DVI_RESOLUTION`, `SCREEN_W` and `SCREEN_H` in [`include/dvi_config.h`](include/dvi_config.h); if neither flag is defined the build fails with a `#error`.
+Selecting a flag sets `DVI_RESOLUTION`, `SCREEN_W` and `SCREEN_H` in [`include/dvi_config.h`](include/dvi_config.h); if no flag is defined the build fails with a `#error`.
 
 ---
 
