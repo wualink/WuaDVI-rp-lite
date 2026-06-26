@@ -13,7 +13,9 @@
 /* ------------------------------------------------------------------ */
 /* DVI display                                                          */
 /* ------------------------------------------------------------------ */
-DVIGFX16 dvi_display(DVI_RESOLUTION, DVI_BOARD_CFG);
+/* WuaDVI is DVIGFX16 (RGB565) or DVIGFX1 (mono), chosen by the
+ * resolution flag in platformio.ini.  See dvi_config.h. */
+WuaDVI dvi_display(DVI_RESOLUTION, DVI_BOARD_CFG);
 
 /* Non-blocking Serial wrapper — a blocked USB-CDC write can stall ~1 ms,
  * long enough to delay PicoDVI's DMA-chain interrupts (period ≈ 69 µs/line). */
@@ -65,6 +67,14 @@ void setup(void) {
                 (unsigned long)FRAME_TOTAL_SIZE);
 #endif
 
+#if defined(WUADVI_COLOR_MONO)
+    /* Boot/waiting screen for mono: a static pattern that confirms the native
+     * 640x480 signal locks before the ESP32 connects.  Once rects arrive they
+     * blit over it (1-bit packed; see spi_slave_blit_rect). */
+    dvi_display.drawTestPattern();
+    safe_print("[MODE] MONO 640x480 — 1-bit SPI, waiting for ESP32\n");
+#endif
+
     watchdog_enable(8000, true);
     safe_print("[OK] Setup complete — waiting for framebuffer\n");
 }
@@ -75,13 +85,15 @@ void loop(void) {
     bool packet_received = false;
 
 #ifdef SERIAL_TEST
-    packet_received = serial_test_poll(dvi_display.getBuffer());
+    /* getBuffer() is uint16_t* (RGB565) or uint8_t* (mono, bit-packed); the
+     * blit/test helpers work in raw bytes, so view it as bytes regardless of mode. */
+    packet_received = serial_test_poll((uint8_t *)dvi_display.getBuffer());
 #else
     if (spi_slave_poll()) {
         /* Partial-rect mode: each packet is one dirty rect from the ESP32's
          * LVGL flush.  Blit it into the right position of the DVI framebuffer;
          * untouched pixels keep their previous content. */
-        spi_slave_blit_rect(dvi_display.getBuffer());
+        spi_slave_blit_rect((uint8_t *)dvi_display.getBuffer());
         packet_received = true;
     }
 #endif

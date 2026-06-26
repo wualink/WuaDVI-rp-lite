@@ -186,8 +186,43 @@ uint32_t spi_slave_dma_remaining(void){
 }
 const uint8_t *spi_slave_last_bad_header(void) { return s_last_bad_hdr; }
 
-void spi_slave_blit_rect(uint16_t *dvi_fb) {
+void spi_slave_blit_rect(uint8_t *dvi_fb) {
     if (dvi_fb == nullptr) return;
+
+#if defined(WUADVI_COLOR_MONO)
+    /* Monochrome (640x480x1): the payload is 1 bit/pixel, packed MSB-first with
+     * each rect row padded to a whole byte.  Unpack into the GFXcanvas1 buffer
+     * (also MSB-first, stride = ceil(SCREEN_W/8)) one pixel at a time, since the
+     * destination x is generally not byte-aligned. */
+    const uint16_t x1 = read_u16_le(s_dma_rx_buf + 4);
+    const uint16_t y1 = read_u16_le(s_dma_rx_buf + 6);
+    const uint16_t x2 = read_u16_le(s_dma_rx_buf + 8);
+    const uint16_t y2 = read_u16_le(s_dma_rx_buf + 10);
+
+    if (x2 < x1 || y2 < y1)               return;
+    if (x2 >= SCREEN_W || y2 >= SCREEN_H) return;
+
+    const uint32_t rect_w   = (uint32_t)(x2 - x1 + 1);
+    const uint32_t rect_h   = (uint32_t)(y2 - y1 + 1);
+    const uint32_t row_bytes = (rect_w + 7u) / 8u;
+    if (row_bytes * rect_h > RECT_PAYLOAD_MAX) return;
+
+    const uint8_t *src       = s_dma_rx_buf + RECT_HEADER_SIZE;
+    const uint32_t fb_stride = ((uint32_t)SCREEN_W + 7u) / 8u;
+
+    for (uint32_t row = 0; row < rect_h; ++row) {
+        const uint8_t *srow = src + row * row_bytes;
+        uint8_t       *frow = dvi_fb + (uint32_t)(y1 + row) * fb_stride;
+        for (uint32_t col = 0; col < rect_w; ++col) {
+            const uint8_t bit  = (uint8_t)((srow[col >> 3] >> (7 - (col & 7))) & 1u);
+            const uint32_t x   = (uint32_t)x1 + col;
+            uint8_t       *fb  = frow + (x >> 3);
+            const uint8_t  msk = (uint8_t)(0x80u >> (x & 7));
+            if (bit) *fb |= msk; else *fb &= (uint8_t)~msk;
+        }
+    }
+    return;
+#else
 
     const uint16_t x1 = read_u16_le(s_dma_rx_buf + 4);
     const uint16_t y1 = read_u16_le(s_dma_rx_buf + 6);
@@ -198,18 +233,22 @@ void spi_slave_blit_rect(uint16_t *dvi_fb) {
     if (x2 < x1 || y2 < y1)              return;
     if (x2 >= SCREEN_W || y2 >= SCREEN_H) return;
 
+    /* Format-agnostic blit: WUADVI_PIXEL_BYTES is 2 (RGB565).  Both source
+     * payload and destination framebuffer use the same bytes-per-pixel, so the
+     * copy is identical apart from the stride. */
     const uint32_t rect_w  = (uint32_t)(x2 - x1 + 1);
     const uint32_t rect_h  = (uint32_t)(y2 - y1 + 1);
-    const uint32_t row_bytes = rect_w * 2u;
-    if (rect_w * rect_h * 2u > RECT_PAYLOAD_MAX) return;
+    const uint32_t row_bytes = rect_w * WUADVI_PIXEL_BYTES;
+    if (rect_w * rect_h * WUADVI_PIXEL_BYTES > RECT_PAYLOAD_MAX) return;
 
     const uint8_t  *src = s_dma_rx_buf + RECT_HEADER_SIZE;
-    uint8_t        *dst = (uint8_t *)dvi_fb + ((uint32_t)y1 * SCREEN_W + x1) * 2u;
-    const uint32_t  dst_stride_bytes = (uint32_t)SCREEN_W * 2u;
+    uint8_t        *dst = dvi_fb + ((uint32_t)y1 * SCREEN_W + x1) * WUADVI_PIXEL_BYTES;
+    const uint32_t  dst_stride_bytes = (uint32_t)SCREEN_W * WUADVI_PIXEL_BYTES;
 
     for (uint32_t row = 0; row < rect_h; ++row) {
         memcpy(dst, src, row_bytes);
         src += row_bytes;
         dst += dst_stride_bytes;
     }
+#endif /* WUADVI_COLOR_MONO */
 }
