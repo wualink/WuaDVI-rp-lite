@@ -28,7 +28,7 @@ No UI logic lives here. The RP2350 knows nothing about widgets, layouts, or even
 
 ## Resolution
 
-The native framebuffer resolution is selectable at **compile time** via a build flag in [`platformio.ini`](platformio.ini). The framebuffer lives uncompressed in the RP2350's 520 KB SRAM, so its size is the limiting factor. Three modes are available:
+The native framebuffer resolution is selectable at **compile time** via one of three PlatformIO environments in [`platformio.ini`](platformio.ini) — `rp2350_pizero_320x240`, `rp2350_pizero_400x240`, `rp2350_pizero_640x480x1` — each setting a different `-DWUADVI_RES_*` build flag. The framebuffer lives uncompressed in the RP2350's 520 KB SRAM, so its size is the limiting factor. Three modes are available:
 
 | Build flag               | Native FB | Framebuffer | Color              | DVI output   | VREG   |
 |--------------------------|-----------|-------------|--------------------|--------------|--------|
@@ -43,15 +43,12 @@ The native framebuffer resolution is selectable at **compile time** via a build 
 
 All modes share `VREG_VOLTAGE_1_20`.
 
-```ini
-build_flags =
-    ; Uncomment exactly ONE — must match the flag in WuaDVI-esp32-lvgl:
-    -DWUADVI_RES_320x240
-    ; -DWUADVI_RES_400x240
-    ; -DWUADVI_RES_640x480x1
+```bash
+# Pick the env matching WuaDVI-esp32-lvgl's active flag:
+pio run -e rp2350_pizero_320x240 --target upload
 ```
 
-> **Both firmwares must select the same flag.** The ESP32 sends dirty-rect coordinates relative to `SCREEN_W`/`SCREEN_H`; if the two sides disagree, rects won't line up with the RP2350's framebuffer (and out-of-bounds rects are silently dropped).
+> **Both firmwares must select the same flag/resolution.** The ESP32 sends dirty-rect coordinates relative to `SCREEN_W`/`SCREEN_H`; if the two sides disagree, rects won't line up with the RP2350's framebuffer (and out-of-bounds rects are silently dropped).
 
 Selecting a flag sets `DVI_RESOLUTION`, `SCREEN_W` and `SCREEN_H` in [`include/dvi_config.h`](include/dvi_config.h); if no flag is defined the build fails with a `#error`.
 
@@ -203,16 +200,20 @@ This firmware is passive — it only renders what it receives. The companion **W
 
 ## Build & Flash
 
+There is one PlatformIO environment per resolution — pick the one matching WuaDVI-esp32-lvgl's active `-DWUADVI_RES_*` flag: `rp2350_pizero_320x240`, `rp2350_pizero_400x240`, or `rp2350_pizero_640x480x1`.
+
 ```bash
 # Build
-pio run -e rp2350_pizero
+pio run -e rp2350_pizero_640x480x1
 
 # Upload (UF2 drag-and-drop or picotool)
-pio run -e rp2350_pizero --target upload
+pio run -e rp2350_pizero_640x480x1 --target upload
 
 # Monitor
 pio device monitor
 ```
+
+Running `pio run` with no `-e` builds all three environments — useful to confirm every resolution still compiles, but slower and not what you want for a quick iterate/flash loop.
 
 Hold **BOOTSEL** while plugging the USB cable to enter UF2 bootloader mode for the first flash.
 
