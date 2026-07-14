@@ -163,6 +163,30 @@ bool spi_slave_poll(void) {
         s_last_bad_hdr[1] = s_dma_rx_buf[1];
         s_last_bad_hdr[2] = s_dma_rx_buf[2];
         s_last_bad_hdr[3] = s_dma_rx_buf[3];
+
+        /* Bad magic means the fixed-length DMA is out of step with the
+         * master's packet boundaries (armed mid-burst — e.g. a stray byte
+         * arrived during the mode switch — or bytes were lost to an RX FIFO
+         * overrun).  A fixed-length transfer can never recover by itself:
+         * every subsequent completion stays offset by the same amount (the
+         * tell-tale is dma_remaining frozen at a nonzero value between
+         * bursts).
+         *
+         * Resync: swallow incoming bytes until the bus has been quiet for
+         * RESYNC_QUIET_US.  The master pauses several ms between packets, so
+         * a quiet window this long only exists at a packet boundary — the
+         * next byte to arrive is byte 0 of a fresh packet.  Worst-case
+         * blocking is the tail of the current packet (~0.7 ms at 25 MHz)
+         * plus the quiet window; the watchdog (8 s) is nowhere near a
+         * concern. */
+        const uint32_t RESYNC_QUIET_US = 300u;
+        uint32_t last_rx_us = micros();
+        while ((uint32_t)(micros() - last_rx_us) < RESYNC_QUIET_US) {
+            if (spi_is_readable(SPI_PORT)) {
+                (void)spi_get_hw(SPI_PORT)->dr;
+                last_rx_us = micros();
+            }
+        }
     }
 
     /* Re-arm both channels regardless of validity so the next packet is never
