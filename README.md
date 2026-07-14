@@ -238,6 +238,6 @@ Hold **BOOTSEL** while plugging the USB cable to enter UF2 bootloader mode for t
 
 | Library       | Source                              | Purpose            |
 |---------------|-------------------------------------|--------------------|
-| PicoDVI (fork)| `https://github.com/Caza20/PicoDVI` | DVI/HDMI output    |
+| PicoDVI (fork)| `https://github.com/wualink/PicoDVI` | DVI/HDMI output    |
 | pico-sdk      | Bundled with earlephilhower core    | DMA, SPI, PIO APIs |
 # WuaDVI-rp-lite
