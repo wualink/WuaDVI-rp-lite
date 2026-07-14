@@ -36,15 +36,21 @@ static const struct dvi_serialiser_cfg rp2350_pizero_cfg = {
  *     320x240 RGB565 = 150 KB  →  scanned out as 640x480p60  (pixel 2x2)
  *     400x240 RGB565 = 192 KB  →  scanned out as 800x480p60  (pixel 2x2)
  *
- *   ── Monochrome mode (DVIGFX1, 1 bit/pixel) ──────────────────────────────
- *   The 1-bit TMDS encoder is far cheaper, so it CAN drive native 640x480:
+ *   ── Monochrome modes (DVIGFX1, 1 bit/pixel) ─────────────────────────────
+ *   The 1-bit TMDS encoder is far cheaper, so it CAN drive native modes:
  *
  *     640x480 mono = 37.5 KB framebuffer  →  640x480p60 native (pixel 1x1)
+ *     800x600 mono = 58.6 KB framebuffer  →  800x600p60 native (pixel 1x1)
  *
- *   Square pixels, native resolution, black & white only.  This is the library
- *   stock 1-bit example mode (DVIGFX1 @ DVI_RES_640x480p60).
+ *   Square pixels, native resolution, black & white only.  640x480 is the
+ *   library stock 1-bit example mode; 800x600 uses the CVT reduced-blanking
+ *   timing added to our PicoDVI fork (DVI_RES_800x600p60_reduced, 354 MHz
+ *   sysclock @ 1.30 V — a harder overclock than the other modes, and the
+ *   reduced-blanking signal is rejected by some older monitors).
  *
- * All modes share VREG_VOLTAGE_1_20.  The ESP32 side (WuaDVI-esp32-lvgl) MUST
+ * RGB565 and 640x480 modes run VREG_VOLTAGE_1_20 (252–295 MHz); 800x600 needs
+ * VREG_VOLTAGE_1_30 (354 MHz), set by the library's dvispec table.  The ESP32
+ * side (WuaDVI-esp32-lvgl) MUST
  * select the SAME resolution flag — the wire format (bytes/pixel, coords)
  * derives from it on both ends; a mismatch scrambles the image.
  *
@@ -52,12 +58,24 @@ static const struct dvi_serialiser_cfg rp2350_pizero_cfg = {
  *   WUADVI_COLOR_MONO     defined only in 1-bit mode (selects DVIGFX1 path)
  *   WUADVI_PIXEL_BYTES    framebuffer/wire bytes per pixel (2 = RGB565)
  */
-#if defined(WUADVI_RES_640x480x1)
+#if defined(WUADVI_RES_800x600x1)
+  #define DVI_RESOLUTION        DVI_RES_800x600p60_reduced
+  #define SCREEN_W              800
+  #define SCREEN_H              600
+  #define WUADVI_COLOR_MONO     1     /* DVIGFX1, 1 bit/pixel */
+  #define WUADVI_PIXEL_BYTES    1u    /* placeholder; mono uses bit-packing, not byte/pixel */
+  /* 354 MHz needs 1.30 V.  CRITICAL: the vreg column in the library's dvispec
+   * table is dead code — the voltage PicoDVI::begin() applies is this
+   * constructor parameter (default 1.20 V).  Passing it explicitly is what
+   * keeps begin() from DROPPING the voltage while already running at 354 MHz. */
+  #define WUADVI_VREG           VREG_VOLTAGE_1_30
+#elif defined(WUADVI_RES_640x480x1)
   #define DVI_RESOLUTION        DVI_RES_640x480p60
   #define SCREEN_W              640
   #define SCREEN_H              480
   #define WUADVI_COLOR_MONO     1     /* DVIGFX1, 1 bit/pixel */
   #define WUADVI_PIXEL_BYTES    1u    /* placeholder; mono uses bit-packing, not byte/pixel */
+  #define WUADVI_VREG           VREG_VOLTAGE_1_20
 #elif defined(WUADVI_RES_400x240)
   #define DVI_RESOLUTION        DVI_RES_400x240p60
   #define SCREEN_W              400
@@ -69,7 +87,7 @@ static const struct dvi_serialiser_cfg rp2350_pizero_cfg = {
   #define SCREEN_H              240
   #define WUADVI_PIXEL_BYTES    2u    /* RGB565 */
 #else
-  #error "No resolution selected — define WUADVI_RES_320x240, WUADVI_RES_400x240 or WUADVI_RES_640x480x1 in platformio.ini build_flags"
+  #error "No resolution selected — define WUADVI_RES_320x240, WUADVI_RES_400x240, WUADVI_RES_640x480x1 or WUADVI_RES_800x600x1 in platformio.ini build_flags"
 #endif
 
 /*
@@ -85,16 +103,16 @@ static const struct dvi_serialiser_cfg rp2350_pizero_cfg = {
  * RGB565 modes (320x240 / 400x240): WuaDVI is just DVIGFX16 — behavior is
  * exactly the original, hardware-verified pipeline.
  *
- * Monochrome mode (640x480x1): WuaDVI is DVIGFX1.  color565()/fillScreen()
- * keep the same signatures but collapse color to 1 bit by luminance threshold,
- * and drawTestPattern() paints a static image used to validate that the native
- * 640x480 mono signal locks (the 1-bit SPI pipeline is not built yet).
+ * Monochrome modes (640x480x1 / 800x600x1): WuaDVI is DVIGFX1.
+ * color565()/fillScreen() keep the same signatures but collapse color to 1 bit
+ * by luminance threshold, and drawTestPattern() paints a static image used to
+ * validate that the native mono signal locks before the ESP32 connects.
  */
 #if defined(WUADVI_COLOR_MONO)
 class WuaDVI : public DVIGFX1 {
 public:
     WuaDVI(const DVIresolution res, const struct dvi_serialiser_cfg &cfg)
-        : DVIGFX1(res, false /* single-buffered */, cfg) {}
+        : DVIGFX1(res, false /* single-buffered */, cfg, WUADVI_VREG) {}
 
     /* Same helper DVIGFX16 exposes, so call sites build colors identically. */
     uint16_t color565(uint8_t red, uint8_t green, uint8_t blue) {
@@ -107,7 +125,7 @@ public:
     }
 
     /* Static signal-test image: white border, diagonals, a few filled boxes and
-     * a label.  If this shows crisp and stable, native 640x480 mono works. */
+     * a label.  If this shows crisp and stable, the native mono mode works. */
     void drawTestPattern(void) {
         DVIGFX1::fillScreen(0);
         drawRect(0, 0, SCREEN_W, SCREEN_H, 1);
@@ -120,7 +138,7 @@ public:
         setTextColor(1);
         setTextSize(2);
         setCursor(180, 70);
-        print("WuaDVI 640x480 mono");
+        printf("WuaDVI %dx%d mono", SCREEN_W, SCREEN_H);
     }
 
 private:

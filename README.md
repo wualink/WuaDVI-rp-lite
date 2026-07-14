@@ -28,20 +28,24 @@ No UI logic lives here. The RP2350 knows nothing about widgets, layouts, or even
 
 ## Resolution
 
-The native framebuffer resolution is selectable at **compile time** via one of three PlatformIO environments in [`platformio.ini`](platformio.ini) — `rp2350_pizero_320x240`, `rp2350_pizero_400x240`, `rp2350_pizero_640x480x1` — each setting a different `-DWUADVI_RES_*` build flag. The framebuffer lives uncompressed in the RP2350's 520 KB SRAM, so its size is the limiting factor. Three modes are available:
+The native framebuffer resolution is selectable at **compile time** via one of four PlatformIO environments in [`platformio.ini`](platformio.ini) — `rp2350_pizero_320x240`, `rp2350_pizero_400x240`, `rp2350_pizero_640x480x1`, `rp2350_pizero_800x600x1` — each setting a different `-DWUADVI_RES_*` build flag. The framebuffer lives uncompressed in the RP2350's 520 KB SRAM, so its size is the limiting factor. Four modes are available:
 
-| Build flag               | Native FB | Framebuffer | Color              | DVI output   | VREG   |
-|--------------------------|-----------|-------------|--------------------|--------------|--------|
-| `-DWUADVI_RES_320x240`   | 320 × 240 | 150 KB      | RGB565 (16-bit)    | 640 × 480p60 | 1.20 V |
-| `-DWUADVI_RES_400x240`   | 400 × 240 | 192 KB      | RGB565 (16-bit)    | 800 × 480p60 | 1.20 V |
-| `-DWUADVI_RES_640x480x1` | 640 × 480 | 37.5 KB     | Monochrome (1-bit) | 640 × 480p60 | 1.20 V |
+| Build flag               | Native FB | Framebuffer | Color              | DVI output        | Sysclock / VREG   |
+|--------------------------|-----------|-------------|--------------------|-------------------|-------------------|
+| `-DWUADVI_RES_320x240`   | 320 × 240 | 150 KB      | RGB565 (16-bit)    | 640 × 480p60      | 252 MHz / 1.20 V  |
+| `-DWUADVI_RES_400x240`   | 400 × 240 | 192 KB      | RGB565 (16-bit)    | 800 × 480p60      | 295 MHz / 1.20 V  |
+| `-DWUADVI_RES_640x480x1` | 640 × 480 | 37.5 KB     | Monochrome (1-bit) | 640 × 480p60      | 252 MHz / 1.20 V  |
+| `-DWUADVI_RES_800x600x1` | 800 × 600 | 58.6 KB     | Monochrome (1-bit) | 800 × 600p60 (RB) | 354 MHz / 1.30 V  |
 
 - **RGB565 modes (320×240 / 400×240)** — full color via `DVIGFX16` with 2× pixel doubling (square pixels). This is the original, hardware-verified pipeline.
 - **Monochrome mode (640×480x1)** — `DVIGFX1`, 1 bit/pixel, native (1:1) pixels. This is the only way to reach a true 640×480 on this board: full-color 640×480 RGB565 needs 600 KB and exceeds the 520 KB SRAM, and an 8-bit indexed alternative isn't viable on the RP2350-PiZero (its real-time TMDS encoder can't sustain 640 unique pixels per scanline). The 1-bit TMDS encoder is cheap enough to drive native 640×480.
+- **Monochrome mode (800×600x1)** — same `DVIGFX1` pipeline at native 800×600 using the **CVT reduced-blanking** timing (RB) added to our PicoDVI fork (`DVI_RES_800x600p60_reduced`). Two caveats:
+  - **Hardest overclock of the set**: the sysclock runs at the TMDS bit clock, 354 MHz @ 1.30 V (stock RP2350 rating is 150 MHz). Stability is chip-lot dependent — validate on your board. `main.cpp` raises the QMI flash clock divider to 4 before `begin()` so XIP stays within the QSPI flash's rated speed.
+  - **Monitor compatibility**: some older monitors reject reduced-blanking 800×600. The full VESA-blanking variant (`DVI_RES_800x600p60`, 400 MHz) is also exposed in the fork if a monitor refuses the RB signal and your chip tolerates the higher clock.
 
 > **⚠️ Monochrome flat-field banding.** In 1-bit mode, large flat areas (e.g. a solid white background) show faint, regularly-spaced vertical lines — an artifact inherent to TMDS-encoding a constant 1-bit field, not a firmware bug. Busy content and **dark backgrounds mask it completely**, so prefer black/dark backgrounds with light foreground shapes in this mode. For artifact-free flat fields, use an RGB565 mode instead.
 
-All modes share `VREG_VOLTAGE_1_20`.
+All modes except 800×600x1 share `VREG_VOLTAGE_1_20`; 800×600x1 uses `VREG_VOLTAGE_1_30`, passed explicitly to the `DVIGFX1` constructor via `WUADVI_VREG` in [`include/dvi_config.h`](include/dvi_config.h) (the voltage column in the library's `dvispec` table is dead code — `begin()` applies the constructor parameter).
 
 ```bash
 # Pick the env matching WuaDVI-esp32-lvgl's active flag:

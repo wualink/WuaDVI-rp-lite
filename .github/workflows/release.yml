@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        resolution: [320x240, 400x240, 640x480x1]
+        resolution: [320x240, 400x240, 640x480x1, 800x600x1]
     steps:
       - uses: actions/checkout@v4
 

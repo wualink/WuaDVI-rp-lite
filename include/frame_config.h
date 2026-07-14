@@ -31,8 +31,8 @@
 
 /*
  * Pixel size is mode-dependent (see dvi_config.h):
- *   - RGB565 modes (320x240 / 400x240): WUADVI_PIXEL_BYTES == 2
- *   - Monochrome mode (640x480x1):      1 bit/pixel, packed (see below)
+ *   - RGB565 modes (320x240 / 400x240):        WUADVI_PIXEL_BYTES == 2
+ *   - Mono modes (640x480x1 / 800x600x1):      1 bit/pixel, packed (see below)
  * Every size below is derived from it so the rect protocol is format-agnostic:
  * the blit just copies WUADVI_PIXEL_BYTES-wide pixels at the right stride.
  */
@@ -65,7 +65,7 @@
 /*
  * Monochrome wire format: 1 bit/pixel, packed MSB-first, each rect row padded
  * to a whole byte.  Max payload = a full-width strip of PARTIAL_BUF_LINES rows.
- *   RECT_ROW_BYTES_MAX = ceil(SCREEN_W/8)  (80 B for 640)
+ *   RECT_ROW_BYTES_MAX = ceil(SCREEN_W/8)  (80 B for 640, 100 B for 800)
  */
 #define RECT_ROW_BYTES_MAX  (((uint32_t)(SCREEN_W) + 7u) / 8u)
 #define RECT_PAYLOAD_MAX    (RECT_ROW_BYTES_MAX * (PARTIAL_BUF_LINES))
