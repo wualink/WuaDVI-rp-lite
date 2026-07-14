@@ -4,6 +4,22 @@
 #include <PicoDVI.h>
 #include "dvi_config.h"
 
+#if defined(WUADVI_RES_800x600x1)
+#include "hardware/structs/qmi.h"
+
+/* Raise the QMI flash clock divider so QSPI/XIP stays within the flash's
+ * rated speed once PicoDVI raises the sysclock to 354 MHz (354/4 ≈ 88 MHz;
+ * the bootrom divider of 3 would give 118 MHz, too close to the limit and
+ * set assuming a far lower sysclock).  In RAM: XIP fetches mid-write would
+ * be performed with the very timing being changed.  Flash reads at this
+ * setting were verified by checksum against 150 MHz during bring-up. */
+static void __not_in_flash_func(qmi_flash_clkdiv)(uint32_t clkdiv) {
+    qmi_hw->m[0].timing = (qmi_hw->m[0].timing & ~QMI_M0_TIMING_CLKDIV_BITS)
+                        | (clkdiv << QMI_M0_TIMING_CLKDIV_LSB);
+    __compiler_memory_barrier();
+}
+#endif
+
 #ifdef SERIAL_TEST
 #include "serial_test.h"
 #else
@@ -45,6 +61,11 @@ void setup(void) {
      * PIO window (0-31).  Shift PIO0's window to 16-47 to reach them. */
     pio_set_gpio_base(pio0, 16);
 
+#if defined(WUADVI_RES_800x600x1)
+    /* Must run BEFORE dvi_display.begin() raises the sysclock to 354 MHz. */
+    qmi_flash_clkdiv(4u);
+#endif
+
     if (!dvi_display.begin()) {
         safe_print("[ERROR] DVI init failed\n");
         while (true) tight_loop_contents();
@@ -69,10 +90,11 @@ void setup(void) {
 
 #if defined(WUADVI_COLOR_MONO)
     /* Boot/waiting screen for mono: a static pattern that confirms the native
-     * 640x480 signal locks before the ESP32 connects.  Once rects arrive they
-     * blit over it (1-bit packed; see spi_slave_blit_rect). */
+     * signal locks before the ESP32 connects.  Once rects arrive they blit
+     * over it (1-bit packed; see spi_slave_blit_rect). */
     dvi_display.drawTestPattern();
-    safe_print("[MODE] MONO 640x480 — 1-bit SPI, waiting for ESP32\n");
+    safe_printf("[MODE] MONO %dx%d — 1-bit SPI, waiting for ESP32\n",
+                SCREEN_W, SCREEN_H);
 #endif
 
     watchdog_enable(8000, true);
